@@ -181,10 +181,11 @@ tr.bubble-team:nth-child(even) td { background: #e8eeff; }
   <!-- STEP 1: Standings -->
   <div class="panel active" id="panel-1">
     <div class="info-box">
-      <strong>The Proposed Rule:</strong> Under this system, any team projected to be in the lottery (worst 14 records)
-      must trade their 1st-round pick before the trade deadline. Untraded picks are locked at their seeded position
+      <strong>The Proposed Rule:</strong> Under this system, any team in the lottery (worst 14 records at season's end)
+      must have traded their 1st-round pick before the trade deadline. Untraded picks are locked at their seeded position
       with no lottery upside. The top 3 picks are drawn only from the pool of traded picks, using pre-2019 lottery odds.
       A <strong>2-back provision</strong> caps how far a pick can fall: no more than 2 spots worse than the team's deadline standing.
+      Bubble teams (15-20) should also trade as insurance in case they slip into the lottery.
     </div>
 
     <div class="card">
@@ -218,7 +219,8 @@ tr.bubble-team:nth-child(even) td { background: #e8eeff; }
   <div class="panel" id="panel-2">
     <div class="info-box">
       <strong>Trade Deadline:</strong> Lottery teams holding their own pick must swap with another team.
-      Select two picks below to swap them. Teams still holding their own pick are flagged in red.
+      Bubble teams (15-20) should also swap as insurance in case they fall into the lottery.
+      Select two picks below to swap them. Teams still needing to trade are flagged in red (lottery) or amber (bubble).
     </div>
 
     <div class="card">
@@ -236,7 +238,7 @@ tr.bubble-team:nth-child(even) td { background: #e8eeff; }
       </div>
       <div style="margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border); display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
         <button class="btn btn-outline btn-sm" onclick="loadDefaultScenario()">Load Example Scenario</button>
-        <span style="font-size:0.82rem;color:var(--text-muted);">Pre-fills a plausible set of 6 swaps pairing top-of-lottery with bottom-of-lottery teams</span>
+        <span style="font-size:0.82rem;color:var(--text-muted);">Pre-fills 9 swaps: 6 lottery + 3 bubble team insurance swaps</span>
       </div>
     </div>
 
@@ -287,9 +289,10 @@ tr.bubble-team:nth-child(even) td { background: #e8eeff; }
   <!-- STEP 4: Lottery -->
   <div class="panel" id="panel-4">
     <div class="info-box">
-      <strong>Lottery Rules:</strong> Only <em>traded</em> picks enter the top-3 drawing (pre-2019 Era 5 weights).
+      <strong>Lottery Rules:</strong> The 14 worst teams by end-of-season record form the lottery (may differ from deadline).
+      Only <em>traded</em> picks enter the top-3 drawing (pre-2019 Era 5 weights).
       Untraded picks are locked at their seed — no lottery upside. The <strong>2-back provision</strong> caps each pick
-      at most 2 positions worse than the team's deadline standing.
+      at most 2 positions worse than the team's deadline standing within the lottery group.
     </div>
 
     <div class="card">
@@ -459,7 +462,9 @@ const SWAP_RIGHTS = [
 
 let teamMap = {};          // abbrev -> team object
 let deadlineRanks = {};    // abbrev -> rank (1=worst)
-let deadlineLotterySet = new Set(); // the 14 lottery teams at deadline (fixed pool)
+let deadlineLotterySet = new Set(); // the 14 lottery teams at deadline
+let deadlineBubbleSet = new Set();  // the next 6 bubble teams at deadline (15-20)
+let deadlineTrackedSet = new Set(); // lottery + bubble (20 teams)
 let currentStep = 1;
 let maxStepReached = 1;
 
@@ -484,22 +489,24 @@ function getProtectionDisplay(abbrev) {
   return `${obl.protection} (→ ${obl.owner})`;
 }
 
-function initPickOwnershipForLottery(lotteryTeams) {
-  const lotteryAbbrevs = new Set(lotteryTeams.map(t => t.abbrev));
+function initPickOwnershipForLottery(trackedTeams) {
+  // trackedTeams includes lottery (1-14) + bubble (15-20) teams
+  const lotteryAbbrevs = new Set(trackedTeams.slice(0, 14).map(t => t.abbrev));
 
-  lotteryTeams.forEach((t, i) => {
+  trackedTeams.forEach((t, i) => {
     const seed = i + 1;
+    const isLottery = seed <= 14;
     const obl = PICK_OBLIGATIONS[t.abbrev];
 
     // Check if swap rights from a non-lottery team effectively claim this pick
     // (a non-lottery beneficiary will always exercise the swap since any lottery pick beats theirs)
-    const activeSwap = SWAP_RIGHTS.find(swap =>
+    const activeSwap = isLottery && SWAP_RIGHTS.find(swap =>
       swap.teams.includes(t.abbrev) &&
       swap.beneficiary !== t.abbrev &&
       !lotteryAbbrevs.has(swap.beneficiary)
     );
 
-    if (obl) {
+    if (isLottery && obl) {
       // Check if the obligation would convey at this team's lottery seed
       const wouldConvey = obl.condition(seed);
       if (wouldConvey) {
@@ -523,8 +530,6 @@ function initPickOwnershipForLottery(lotteryTeams) {
       }
     } else if (activeSwap) {
       // Swap rights from a non-lottery team will claim this pick
-      // Owner stays as the team (so applySwapRights still works at draft time)
-      // but isTraded=true so they don't need to trade under the proposal
       pickOwnership[t.abbrev] = {
         owner: t.abbrev,
         protection: `Swap → ${activeSwap.beneficiary}`,
@@ -534,9 +539,10 @@ function initPickOwnershipForLottery(lotteryTeams) {
         swapTarget: activeSwap.beneficiary,
       };
     } else {
+      // Lottery team with no obligation/swap, or bubble team
       pickOwnership[t.abbrev] = {
         owner: t.abbrev,
-        protection: "None",
+        protection: obl ? getProtectionDisplay(t.abbrev) : "None",
         isTraded: false,
         originalObligation: false,
         isResolvedObligation: false,
@@ -561,10 +567,12 @@ function init() {
   const sorted = [...TEAMS].sort((a, b) => a.winPct - b.winPct || b.l - a.l);
   sorted.forEach((t, i) => { deadlineRanks[t.abbrev] = i + 1; });
 
-  // Fix the 14 lottery teams at the deadline (this pool never changes)
+  // Fix the 14 lottery teams and 6 bubble teams at the deadline
   const lotteryTeams = sorted.slice(0, 14);
-  lotteryTeams.forEach(t => deadlineLotterySet.add(t.abbrev));
-  initPickOwnershipForLottery(lotteryTeams);
+  const bubbleTeams = sorted.slice(14, 20);
+  lotteryTeams.forEach(t => { deadlineLotterySet.add(t.abbrev); deadlineTrackedSet.add(t.abbrev); });
+  bubbleTeams.forEach(t => { deadlineBubbleSet.add(t.abbrev); deadlineTrackedSet.add(t.abbrev); });
+  initPickOwnershipForLottery([...lotteryTeams, ...bubbleTeams]);
 
   renderStep1();
   renderStep2();
@@ -622,22 +630,32 @@ function renderStep1() {
     tbody.appendChild(tr);
   });
 
-  // Pick map
+  // Pick map (lottery + bubble teams)
   const pickTbody = document.querySelector('#pick-map-table tbody');
   pickTbody.innerHTML = '';
-  const lotteryTeams = sorted.slice(0, 14);
-  lotteryTeams.forEach((t, i) => {
+  const trackedTeams = sorted.slice(0, 20);
+  trackedTeams.forEach((t, i) => {
     const pick = pickOwnership[t.abbrev];
+    if (!pick) return;
+    const rank = i + 1;
+    const isLottery = rank <= 14;
+    const isBubble = rank > 14;
     const ownerDisplay = pick.owner === t.abbrev
       ? (pick.swapTarget ? t.abbrev + ' (→ ' + pick.swapTarget + ' via swap)' : t.abbrev + ' (own)')
       : pick.owner;
+    const statusHtml = pick.isTraded
+      ? '<span class="traded-ok">Traded</span>'
+      : isLottery
+        ? '<span class="must-trade">Must Trade</span>'
+        : '<span style="color:var(--amber);font-weight:700;">Should Trade</span>';
     const tr = document.createElement('tr');
+    if (isBubble) tr.classList.add('bubble-team');
     tr.innerHTML = `
-      <td>${i + 1}</td>
+      <td>${rank}${isBubble ? ' <span class="badge badge-blue" style="font-size:0.65rem;">Bubble</span>' : ''}</td>
       <td><strong>${t.abbrev}</strong></td>
       <td>${ownerDisplay}</td>
       <td>${pick.protection}</td>
-      <td>${!pick.isTraded ? '<span class="must-trade">Must Trade</span>' : '<span class="traded-ok">Traded</span>'}</td>
+      <td>${statusHtml}</td>
     `;
     pickTbody.appendChild(tr);
   });
@@ -651,8 +669,12 @@ function getLotteryTeamsSorted() {
   return [...TEAMS].sort((a, b) => a.winPct - b.winPct || b.l - a.l).slice(0, 14);
 }
 
+function getTrackedTeamsSorted() {
+  return [...TEAMS].sort((a, b) => a.winPct - b.winPct || b.l - a.l).slice(0, 20);
+}
+
 function renderStep2() {
-  const lotteryTeams = getLotteryTeamsSorted();
+  const trackedTeams = getTrackedTeamsSorted();
 
   // Populate trade dropdowns
   const selA = document.getElementById('trade-pick-a');
@@ -662,49 +684,50 @@ function renderStep2() {
   selA.innerHTML = '';
   selB.innerHTML = '';
 
-  // All 30 teams' picks can be involved in swaps
-  const allSorted = [...TEAMS].sort((a, b) => a.winPct - b.winPct || b.l - a.l);
-  const lotteryAbbrevs = new Set(lotteryTeams.map(t => t.abbrev));
-
-  // For Pick A: show lottery team picks
-  lotteryTeams.forEach(t => {
+  // Show all tracked team picks (lottery + bubble) in dropdowns
+  trackedTeams.forEach(t => {
     const pick = pickOwnership[t.abbrev];
-    const opt = document.createElement('option');
-    opt.value = t.abbrev;
-    opt.textContent = `${t.abbrev}'s pick (owned by ${pick.owner})`;
-    selA.appendChild(opt);
-  });
-
-  // For Pick B: show all lottery team picks (for swapping between lottery picks)
-  lotteryTeams.forEach(t => {
-    const pick = pickOwnership[t.abbrev];
-    const opt = document.createElement('option');
-    opt.value = t.abbrev;
-    opt.textContent = `${t.abbrev}'s pick (owned by ${pick.owner})`;
-    selB.appendChild(opt);
+    if (!pick) return;
+    const optA = document.createElement('option');
+    optA.value = t.abbrev;
+    optA.textContent = `${t.abbrev}'s pick (owned by ${pick.owner})`;
+    selA.appendChild(optA);
+    const optB = document.createElement('option');
+    optB.value = t.abbrev;
+    optB.textContent = `${t.abbrev}'s pick (owned by ${pick.owner})`;
+    selB.appendChild(optB);
   });
 
   if (prevA) selA.value = prevA;
   if (prevB) selB.value = prevB;
 
-  // Trade pick table
+  // Trade pick table (lottery + bubble)
   const tbody = document.querySelector('#trade-pick-table tbody');
   tbody.innerHTML = '';
-  lotteryTeams.forEach((t, i) => {
+  trackedTeams.forEach((t, i) => {
     const pick = pickOwnership[t.abbrev];
+    if (!pick) return;
     const seed = i + 1;
+    const isLottery = seed <= 14;
+    const isBubble = seed > 14;
     const floor = Math.min(seed + 2, 14);
     const ownerDisplay = pick.owner === t.abbrev
       ? (pick.swapTarget ? t.abbrev + ' (→ ' + pick.swapTarget + ' via swap)' : t.abbrev + ' (own)')
       : pick.owner;
+    const statusHtml = pick.isTraded
+      ? '<span class="traded-ok">No</span>'
+      : isLottery
+        ? '<span class="must-trade">Yes — must swap</span>'
+        : '<span style="color:var(--amber);font-weight:600;">Recommended</span>';
     const tr = document.createElement('tr');
+    if (isBubble) tr.classList.add('bubble-team');
     tr.innerHTML = `
-      <td>${seed}</td>
+      <td>${seed}${isBubble ? ' <span class="badge badge-blue" style="font-size:0.65rem;">Bubble</span>' : ''}</td>
       <td><strong>${t.abbrev}</strong></td>
       <td>${ownerDisplay}</td>
       <td>${pick.protection}</td>
-      <td>#${floor}</td>
-      <td>${!pick.isTraded ? '<span class="must-trade">Yes — must swap</span>' : '<span class="traded-ok">No</span>'}</td>
+      <td>${isLottery ? '#' + floor : '—'}</td>
+      <td>${statusHtml}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -763,8 +786,8 @@ function undoTrade(index) {
   const savedTrades = [...tradeHistory.slice(0, index), ...tradeHistory.slice(index + 1)];
 
   // Reset all to original state
-  const lotteryTeams = getLotteryTeamsSorted();
-  initPickOwnershipForLottery(lotteryTeams);
+  const trackedTeams = getTrackedTeamsSorted();
+  initPickOwnershipForLottery(trackedTeams);
 
   // Re-apply remaining trades
   tradeHistory = [];
@@ -787,11 +810,11 @@ function undoTrade(index) {
 
 function loadDefaultScenario() {
   // Reset to initial state
-  const lotteryTeams = getLotteryTeamsSorted();
-  initPickOwnershipForLottery(lotteryTeams);
+  const trackedTeams = getTrackedTeamsSorted();
+  initPickOwnershipForLottery(trackedTeams);
   tradeHistory = [];
 
-  // 6 swaps to clear all 14 lottery picks
+  // 9 swaps: 6 for lottery teams + 3 for bubble teams
   // Already traded: NOP (#2 → ATL), LAC (#10 → OKC), ATL (#14 → SAS via swap rights)
   const defaultTrades = [
     ["SAC", "NOP"],  // Kings #1 ↔ Pelicans #2 (owned by ATL) — ATL gives up NOP pick to get SAC's top pick
@@ -800,6 +823,10 @@ function loadDefaultScenario() {
     ["DAL", "MEM"],  // Mavericks #7 ↔ Grizzlies #8
     ["MIL", "POR"],  // Bucks #9 ↔ Trail Blazers #11
     ["CHA", "CHI"],  // Hornets #12 ↔ Bulls #13
+    // Bubble teams swap as insurance
+    ["ORL", "LAL"],  // Magic #15 ↔ Lakers #20
+    ["MIA", "TOR"],  // Heat #16 ↔ Raptors #19
+    ["GSW", "PHI"],  // Warriors #17 ↔ 76ers #18
   ];
 
   defaultTrades.forEach(([teamA, teamB]) => {
@@ -934,15 +961,15 @@ function renderSimResults() {
 // STEP 4: Lottery
 // ============================================================
 
-function getDeadlineLotteryFromSim() {
-  // Get the 14 deadline lottery teams from sim results (ordered by sim record, worst first)
-  return simResults.teams.filter(t => deadlineLotterySet.has(t.abbrev));
+function getActualLotteryFromSim() {
+  // Get the actual bottom 14 teams by end-of-season record (may include bubble teams that fell in)
+  return simResults.teams.slice(0, 14);
 }
 
 function renderStep4PreLottery() {
   if (!simResults) return;
 
-  const lotteryTeams = getDeadlineLotteryFromSim();
+  const lotteryTeams = getActualLotteryFromSim();
   const board = document.getElementById('pre-lottery-board');
 
   // Apply 2-back provision
@@ -953,12 +980,14 @@ function renderStep4PreLottery() {
     <tbody>`;
 
   seeds.forEach((s, i) => {
-    const isTraded = pickOwnership[s.abbrev] ? pickOwnership[s.abbrev].isTraded : false;
-    const owner = pickOwnership[s.abbrev] ? pickOwnership[s.abbrev].owner : s.abbrev;
+    const po = pickOwnership[s.abbrev];
+    const isTraded = po ? po.isTraded : false;
+    const owner = po ? po.owner : s.abbrev;
+    const wasBubble = deadlineBubbleSet.has(s.abbrev);
     const wasCapped = s.cappedRank < s.endRank;
     html += `<tr${wasCapped ? ' style="background:#d1fae5;"' : ''}>
       <td><strong>${i + 1}</strong></td>
-      <td><strong>${s.abbrev}</strong></td>
+      <td><strong>${s.abbrev}</strong>${wasBubble ? ' <span class="badge badge-blue" style="font-size:0.6rem">was Bubble</span>' : ''}</td>
       <td>${s.w}-${s.l}</td>
       <td>${s.deadlineRank}</td>
       <td>${s.endRank}</td>
@@ -981,7 +1010,7 @@ function renderStep4PreLottery() {
 }
 
 function computeLotterySeeds(lotteryTeams) {
-  // lotteryTeams: the 14 deadline lottery teams, already sorted by sim record (worst first)
+  // lotteryTeams: the actual 14 worst teams by end-of-season record (may include bubble teams)
   // Compute within-group ranks (1-14) at both deadline and end-of-season
 
   // Deadline lottery rank: sort the 14 by their deadline record (worst first = rank 1)
@@ -1032,7 +1061,7 @@ function computeLotterySeeds(lotteryTeams) {
 function runLottery() {
   if (!simResults) return;
 
-  const lotteryTeams = getDeadlineLotteryFromSim();
+  const lotteryTeams = getActualLotteryFromSim();
   const seeds = computeLotterySeeds(lotteryTeams);
 
   // Separate traded vs untraded picks
@@ -1161,9 +1190,10 @@ function buildFullDraftOrder() {
     return { pick: pos, team: selectingTeam, via, notes };
   });
 
-  // Non-lottery picks (15-30): teams NOT in the deadline lottery pool, sorted worst-first
+  // Non-lottery picks (15-30): teams NOT in the actual bottom 14, sorted worst-first
+  const actualLotteryAbbrevs = new Set(lotteryResults.map(s => s.abbrev));
   const nonLotteryByRank = simResults.teams
-    .filter(t => !deadlineLotterySet.has(t.abbrev))
+    .filter(t => !actualLotteryAbbrevs.has(t.abbrev))
     .sort((a, b) => {
       const wpA = a.w / (a.w + a.l);
       const wpB = b.w / (b.w + b.l);
