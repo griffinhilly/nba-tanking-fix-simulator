@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBA Draft Lottery Simulator — Pick-Swap Proposal</title>
+<style>
+:root {
+  --navy: #17408B;
+  --red: #C9082A;
+  --light-navy: #1D4F91;
+  --bg: #f5f6fa;
+  --card-bg: #fff;
+  --border: #e0e3eb;
+  --text: #1a1a2e;
+  --text-muted: #6b7280;
+  --green: #059669;
+  --amber: #d97706;
+  --highlight: #fef3c7;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+
+header {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--light-navy) 100%);
+  color: #fff; padding: 1.5rem 1rem; text-align: center;
+}
+header h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+header p { opacity: 0.85; font-size: 0.95rem; max-width: 700px; margin: 0 auto; }
+
+.container { max-width: 960px; margin: 0 auto; padding: 1rem; }
+
+/* Step indicator */
+.steps-bar {
+  display: flex; justify-content: center; gap: 0.25rem; margin: 1.25rem 0 1.5rem;
+  flex-wrap: wrap;
+}
+.step-indicator {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.5rem 1rem; border-radius: 999px; font-size: 0.85rem; font-weight: 600;
+  background: #e5e7eb; color: var(--text-muted); cursor: default; transition: all 0.2s;
+}
+.step-indicator.active { background: var(--navy); color: #fff; }
+.step-indicator.completed { background: var(--green); color: #fff; cursor: pointer; }
+.step-indicator .num {
+  width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; background: rgba(255,255,255,0.25);
+}
+.step-indicator.active .num { background: rgba(255,255,255,0.3); }
+
+/* Panels */
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* Cards */
+.card {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1.25rem; margin-bottom: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.card h2 { font-size: 1.15rem; margin-bottom: 0.75rem; color: var(--navy); }
+.card h3 { font-size: 1rem; margin-bottom: 0.5rem; color: var(--navy); }
+
+/* Info box */
+.info-box {
+  background: #eff6ff; border-left: 4px solid var(--navy); padding: 0.75rem 1rem;
+  border-radius: 0 8px 8px 0; margin-bottom: 1rem; font-size: 0.9rem;
+}
+.info-box strong { color: var(--navy); }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th { background: var(--navy); color: #fff; padding: 0.5rem 0.6rem; text-align: left; font-weight: 600; position: sticky; top: 0; }
+td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); }
+tr:nth-child(even) td { background: #f9fafb; }
+tr.lottery-team td { background: var(--highlight); }
+tr.lottery-team:nth-child(even) td { background: #fef9e7; }
+tr.bubble-team td { background: #f0f4ff; }
+tr.bubble-team:nth-child(even) td { background: #e8eeff; }
+.table-wrapper { max-height: 740px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
+
+/* Badges */
+.badge {
+  display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+}
+.badge-red { background: #fee2e2; color: #b91c1c; }
+.badge-green { background: #d1fae5; color: #065f46; }
+.badge-blue { background: #dbeafe; color: #1e40af; }
+.badge-amber { background: #fef3c7; color: #92400e; }
+.badge-gray { background: #f3f4f6; color: #4b5563; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.6rem 1.25rem; border: none; border-radius: 8px; font-size: 0.9rem;
+  font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.btn-primary { background: var(--navy); color: #fff; }
+.btn-primary:hover { background: var(--light-navy); transform: translateY(-1px); }
+.btn-red { background: var(--red); color: #fff; }
+.btn-red:hover { opacity: 0.9; }
+.btn-outline { background: transparent; border: 2px solid var(--navy); color: var(--navy); }
+.btn-outline:hover { background: var(--navy); color: #fff; }
+.btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+
+/* Trade interface */
+.trade-row {
+  display: flex; gap: 0.75rem; align-items: end; flex-wrap: wrap; margin-bottom: 0.75rem;
+}
+.trade-row label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
+.trade-row select {
+  padding: 0.5rem; border: 2px solid var(--border); border-radius: 8px; font-size: 0.9rem;
+  background: #fff; min-width: 200px;
+}
+.trade-history { margin-top: 0.75rem; }
+.trade-item {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem;
+  background: #f0f9ff; border-radius: 6px; margin-bottom: 0.35rem; font-size: 0.85rem;
+}
+.trade-item .undo-btn {
+  margin-left: auto; background: none; border: none; color: var(--red); cursor: pointer;
+  font-size: 0.8rem; font-weight: 600;
+}
+
+/* Must-trade warning */
+.must-trade { color: var(--red); font-weight: 700; }
+.traded-ok { color: var(--green); font-weight: 600; }
+
+/* Sim results */
+.sim-table td.up { color: var(--green); font-weight: 600; }
+.sim-table td.down { color: var(--red); font-weight: 600; }
+
+/* Lottery reveal */
+.lottery-pick {
+  display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem;
+  margin-bottom: 0.4rem; border-radius: 8px; font-size: 0.95rem; font-weight: 600;
+  transition: all 0.3s;
+}
+.lottery-pick .pick-num {
+  width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; color: #fff; flex-shrink: 0;
+}
+.lottery-pick.top3 { background: linear-gradient(90deg, #fef3c7, #fff7ed); border: 2px solid #f59e0b; }
+.lottery-pick.top3 .pick-num { background: var(--red); }
+.lottery-pick.regular { background: #f9fafb; border: 1px solid var(--border); }
+.lottery-pick.regular .pick-num { background: var(--navy); }
+.lottery-pick.untraded { opacity: 0.75; border-style: dashed; }
+.lottery-pick .team-name { flex: 1; }
+.lottery-pick .pick-source { font-size: 0.8rem; color: var(--text-muted); font-weight: 400; }
+
+/* Full draft order */
+.draft-order-table td:first-child { font-weight: 700; text-align: center; }
+
+/* Responsive */
+@media (max-width: 640px) {
+  header h1 { font-size: 1.25rem; }
+  .trade-row { flex-direction: column; align-items: stretch; }
+  .trade-row select { min-width: auto; width: 100%; }
+  .step-indicator { padding: 0.4rem 0.6rem; font-size: 0.78rem; }
+  .step-indicator span:not(.num) { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>NBA Draft Lottery Simulator</h1>
+  <p>Exploring a proposed rule: lottery teams must trade their 1st-round pick before the deadline. Simulate the rest of the 2025-26 season and see how it plays out.</p>
+</header>
+
+<div class="container">
+  <div class="steps-bar">
+    <div class="step-indicator active" data-step="1" onclick="goToStep(1)"><span class="num">1</span> <span>Standings</span></div>
+    <div class="step-indicator" data-step="2" onclick="goToStep(2)"><span class="num">2</span> <span>Trades</span></div>
+    <div class="step-indicator" data-step="3" onclick="goToStep(3)"><span class="num">3</span> <span>Simulate</span></div>
+    <div class="step-indicator" data-step="4" onclick="goToStep(4)"><span class="num">4</span> <span>Lottery</span></div>
+  </div>
+
+  <!-- STEP 1: Standings -->
+  <div class="panel active" id="panel-1">
+    <div class="info-box">
+      <strong>The Proposed Rule:</strong> Under this system, any team projected to be in the lottery (worst 14 records)
+      must trade their 1st-round pick before the trade deadline. Untraded picks are locked at their seeded position
+      with no lottery upside. The top 3 picks are drawn only from the pool of traded picks, using pre-2019 lottery odds.
+      A <strong>2-back provision</strong> caps how far a pick can fall: no more than 2 spots worse than the team's deadline standing.
+    </div>
+
+    <div class="card">
+      <h2>Current Standings (through Feb 4)</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;">Ranked by win% (worst first). <span style="background:var(--highlight);padding:0 4px;">Yellow</span> = 14 lottery teams. <span style="background:#f0f4ff;padding:0 4px;">Blue</span> = next 6 bubble teams.</p>
+      <div class="table-wrapper">
+        <table id="standings-table">
+          <thead><tr><th>#</th><th>Team</th><th>W</th><th>L</th><th>Win%</th><th>Conf</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Pick Ownership Map</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;">Who currently controls each lottery team's 1st-round pick, and any protections.</p>
+      <div class="table-wrapper">
+        <table id="pick-map-table">
+          <thead><tr><th>Lottery Seed</th><th>Team</th><th>Pick Owner</th><th>Protection</th><th>Status</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="goToStep(2)">Next: Make Trades &rarr;</button>
+    </div>
+  </div>
+
+  <!-- STEP 2: Trades -->
+  <div class="panel" id="panel-2">
+    <div class="info-box">
+      <strong>Trade Deadline:</strong> Lottery teams holding their own pick must swap with another team.
+      Select two picks below to swap them. Teams still holding their own pick are flagged in red.
+    </div>
+
+    <div class="card">
+      <h2>Swap Picks</h2>
+      <div class="trade-row">
+        <div>
+          <label>Pick A</label><br>
+          <select id="trade-pick-a"></select>
+        </div>
+        <div>
+          <label>Pick B</label><br>
+          <select id="trade-pick-b"></select>
+        </div>
+        <button class="btn btn-primary" onclick="executeTrade()">Swap Picks</button>
+      </div>
+      <div style="margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border); display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+        <button class="btn btn-outline btn-sm" onclick="loadDefaultScenario()">Load Example Scenario</button>
+        <span style="font-size:0.82rem;color:var(--text-muted);">Pre-fills a plausible set of 6 swaps pairing top-of-lottery with bottom-of-lottery teams</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Current Pick Ownership</h2>
+      <div class="table-wrapper">
+        <table id="trade-pick-table">
+          <thead><tr><th>Lottery Seed</th><th>Team</th><th>Pick Owner</th><th>Protection</th><th>2-Back Floor</th><th>Must Trade?</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" id="trade-history-card" style="display:none;">
+      <h2>Trade History</h2>
+      <div id="trade-history" class="trade-history"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="goToStep(1)">&larr; Back</button>
+      <button class="btn btn-primary" onclick="goToStep(3)">Next: Simulate Season &rarr;</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: Simulate -->
+  <div class="panel" id="panel-3">
+    <div class="info-box">
+      <strong>Simulation:</strong> Each remaining game is simulated using the <strong>Log5 method</strong> with
+      a 3% home-court advantage. Teams' true ability is their win% through Feb 4.
+      Natural variance means each run produces different results — just like a real season.
+    </div>
+
+    <div class="card">
+      <h2>Season Simulation</h2>
+      <div class="btn-row" style="margin-top:0;">
+        <button class="btn btn-primary" id="sim-btn" onclick="simulateSeason()">Simulate Rest of Season</button>
+        <button class="btn btn-outline" id="resim-btn" onclick="simulateSeason()" style="display:none;">Re-Simulate</button>
+      </div>
+      <div id="sim-results" style="margin-top:1rem;"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="goToStep(2)">&larr; Back</button>
+      <button class="btn btn-primary" id="to-lottery-btn" onclick="goToStep(4)" disabled>Next: Draft Lottery &rarr;</button>
+    </div>
+  </div>
+
+  <!-- STEP 4: Lottery -->
+  <div class="panel" id="panel-4">
+    <div class="info-box">
+      <strong>Lottery Rules:</strong> Only <em>traded</em> picks enter the top-3 drawing (pre-2019 Era 5 weights).
+      Untraded picks are locked at their seed — no lottery upside. The <strong>2-back provision</strong> caps each pick
+      at most 2 positions worse than the team's deadline standing.
+    </div>
+
+    <div class="card">
+      <h2>Pre-Lottery Board</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;">Seeds determined by simulated end-of-season record, capped by deadline rank + 2.</p>
+      <div id="pre-lottery-board"></div>
+    </div>
+
+    <div class="card">
+      <h2>Run the Lottery</h2>
+      <div class="btn-row" style="margin-top:0;">
+        <button class="btn btn-red" id="lottery-btn" onclick="runLottery()">Run Lottery</button>
+        <button class="btn btn-outline" id="relottery-btn" onclick="runLottery()" style="display:none;">Re-Run Lottery</button>
+      </div>
+      <div id="lottery-results" style="margin-top:1rem;"></div>
+    </div>
+
+    <div class="card" id="full-draft-card" style="display:none;">
+      <h2>Full 1st-Round Draft Order</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;">After applying pick protections and conveying obligations.</p>
+      <div class="table-wrapper">
+        <table id="full-draft-table" class="draft-order-table">
+          <thead><tr><th>Pick</th><th>Team Selecting</th><th>Via</th><th>Notes</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="goToStep(3)">&larr; Back</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATA LAYER
+// ============================================================
+
+const TEAMS = [
+  // Lottery teams (worst 14 by win%) — standings through ~Feb 4
+  { abbrev: "SAC", name: "Sacramento Kings", conf: "West", w: 12, l: 40 },
+  { abbrev: "WAS", name: "Washington Wizards", conf: "East", w: 13, l: 36 },
+  { abbrev: "NOP", name: "New Orleans Pelicans", conf: "West", w: 13, l: 40 },
+  { abbrev: "IND", name: "Indiana Pacers", conf: "East", w: 13, l: 38 },
+  { abbrev: "BKN", name: "Brooklyn Nets", conf: "East", w: 13, l: 36 },
+  { abbrev: "UTA", name: "Utah Jazz", conf: "West", w: 16, l: 35 },
+  { abbrev: "DAL", name: "Dallas Mavericks", conf: "West", w: 19, l: 31 },
+  { abbrev: "MEM", name: "Memphis Grizzlies", conf: "West", w: 20, l: 29 },
+  { abbrev: "MIL", name: "Milwaukee Bucks", conf: "East", w: 20, l: 29 },
+  { abbrev: "CHI", name: "Chicago Bulls", conf: "East", w: 24, l: 27 },
+  { abbrev: "ATL", name: "Atlanta Hawks", conf: "East", w: 25, l: 27 },
+  { abbrev: "CHA", name: "Charlotte Hornets", conf: "East", w: 23, l: 28 },
+  { abbrev: "LAC", name: "LA Clippers", conf: "West", w: 23, l: 27 },
+  { abbrev: "POR", name: "Portland Trail Blazers", conf: "West", w: 23, l: 28 },
+  // Non-lottery teams
+  { abbrev: "ORL", name: "Orlando Magic", conf: "East", w: 25, l: 24 },
+  { abbrev: "MIA", name: "Miami Heat", conf: "East", w: 27, l: 25 },
+  { abbrev: "GSW", name: "Golden State Warriors", conf: "West", w: 27, l: 24 },
+  { abbrev: "PHI", name: "Philadelphia 76ers", conf: "East", w: 29, l: 21 },
+  { abbrev: "TOR", name: "Toronto Raptors", conf: "East", w: 30, l: 22 },
+  { abbrev: "LAL", name: "Los Angeles Lakers", conf: "West", w: 30, l: 19 },
+  { abbrev: "CLE", name: "Cleveland Cavaliers", conf: "East", w: 31, l: 21 },
+  { abbrev: "PHX", name: "Phoenix Suns", conf: "West", w: 31, l: 20 },
+  { abbrev: "HOU", name: "Houston Rockets", conf: "West", w: 31, l: 18 },
+  { abbrev: "MIN", name: "Minnesota Timberwolves", conf: "West", w: 32, l: 20 },
+  { abbrev: "DEN", name: "Denver Nuggets", conf: "West", w: 33, l: 19 },
+  { abbrev: "NYK", name: "New York Knicks", conf: "East", w: 33, l: 18 },
+  { abbrev: "BOS", name: "Boston Celtics", conf: "East", w: 33, l: 18 },
+  { abbrev: "SAS", name: "San Antonio Spurs", conf: "West", w: 34, l: 16 },
+  { abbrev: "DET", name: "Detroit Pistons", conf: "East", w: 37, l: 12 },
+  { abbrev: "OKC", name: "Oklahoma City Thunder", conf: "West", w: 40, l: 12 },
+];
+
+// Remaining schedule: [away, home, date]
+const SCHEDULE = [
+  ["MIA","BOS","2026-02-06"],["NYK","DET","2026-02-06"],["IND","MIL","2026-02-06"],["NOP","MIN","2026-02-06"],["MEM","POR","2026-02-06"],["LAC","SAC","2026-02-06"],
+  ["WAS","BKN","2026-02-07"],["HOU","OKC","2026-02-07"],["DAL","SAS","2026-02-07"],["UTA","ORL","2026-02-07"],["CHA","ATL","2026-02-07"],["DEN","CHI","2026-02-07"],["GSW","LAL","2026-02-07"],["PHI","PHX","2026-02-07"],["MEM","POR","2026-02-07"],["CLE","SAC","2026-02-07"],
+  ["NYK","BOS","2026-02-08"],["MIA","WAS","2026-02-08"],["IND","TOR","2026-02-08"],["LAC","MIN","2026-02-08"],
+  ["DET","CHA","2026-02-09"],["CHI","BKN","2026-02-09"],["UTA","MIA","2026-02-09"],["MIL","ORL","2026-02-09"],["ATL","MIN","2026-02-09"],["SAC","NOP","2026-02-09"],["CLE","DEN","2026-02-09"],["MEM","GSW","2026-02-09"],["OKC","LAL","2026-02-09"],["PHI","POR","2026-02-09"],
+  ["IND","NYK","2026-02-10"],["LAC","HOU","2026-02-10"],["DAL","PHX","2026-02-10"],["SAS","LAL","2026-02-10"],
+  ["ATL","CHA","2026-02-11"],["WAS","CLE","2026-02-11"],["MIL","ORL","2026-02-11"],["CHI","BOS","2026-02-11"],["IND","BKN","2026-02-11"],["NYK","PHI","2026-02-11"],["DET","TOR","2026-02-11"],["LAC","HOU","2026-02-11"],["POR","MIN","2026-02-11"],["MIA","NOP","2026-02-11"],["MEM","DEN","2026-02-11"],["OKC","PHX","2026-02-11"],["SAC","UTA","2026-02-11"],["SAS","GSW","2026-02-11"],
+  ["MIL","OKC","2026-02-12"],["POR","UTA","2026-02-12"],["DAL","LAL","2026-02-12"],
+  // Post All-Star break
+  ["HOU","CHA","2026-02-19"],["BKN","CLE","2026-02-19"],["ATL","PHI","2026-02-19"],["IND","WAS","2026-02-19"],["DET","NYK","2026-02-19"],["TOR","CHI","2026-02-19"],["PHX","SAS","2026-02-19"],["BOS","GSW","2026-02-19"],["ORL","SAC","2026-02-19"],["DEN","LAC","2026-02-19"],
+  ["CLE","CHA","2026-02-20"],["IND","WAS","2026-02-20"],["UTA","MEM","2026-02-20"],["MIA","ATL","2026-02-20"],["DAL","MIN","2026-02-20"],["MIL","NOP","2026-02-20"],["BKN","OKC","2026-02-20"],["LAC","LAL","2026-02-20"],["DEN","POR","2026-02-20"],
+  ["ORL","PHX","2026-02-21"],["PHI","NOP","2026-02-21"],["MEM","MIA","2026-02-21"],["DET","CHI","2026-02-21"],["SAC","SAS","2026-02-21"],["HOU","NYK","2026-02-21"],
+  ["CLE","OKC","2026-02-22"],["BKN","ATL","2026-02-22"],["TOR","MIL","2026-02-22"],["DEN","GSW","2026-02-22"],["DAL","IND","2026-02-22"],["CHA","WAS","2026-02-22"],["BOS","LAL","2026-02-22"],["PHI","MIN","2026-02-22"],["NYK","CHI","2026-02-22"],["POR","PHX","2026-02-22"],["ORL","LAC","2026-02-22"],
+  ["SAS","DET","2026-02-23"],["SAC","MEM","2026-02-23"],["UTA","HOU","2026-02-23"],
+  ["PHI","IND","2026-02-24"],["WAS","ATL","2026-02-24"],["DAL","BKN","2026-02-24"],["OKC","TOR","2026-02-24"],["NYK","CLE","2026-02-24"],["CHA","CHI","2026-02-24"],["MIA","MIL","2026-02-24"],["GSW","NOP","2026-02-24"],["BOS","PHX","2026-02-24"],["MIN","POR","2026-02-24"],["ORL","LAL","2026-02-24"],
+  ["OKC","DET","2026-02-25"],["SAS","TOR","2026-02-25"],["GSW","MEM","2026-02-25"],["SAC","HOU","2026-02-25"],["CLE","MIL","2026-02-25"],["BOS","DEN","2026-02-25"],
+  ["CHA","IND","2026-02-26"],["MIA","PHI","2026-02-26"],["WAS","ATL","2026-02-26"],["SAS","BKN","2026-02-26"],["HOU","ORL","2026-02-26"],["POR","CHI","2026-02-26"],["SAC","DAL","2026-02-26"],["LAL","PHX","2026-02-26"],["NOP","UTA","2026-02-26"],["MIN","LAC","2026-02-26"],
+  ["CLE","DET","2026-02-27"],["BKN","BOS","2026-02-27"],["NYK","MIL","2026-02-27"],["MEM","DAL","2026-02-27"],["DEN","OKC","2026-02-27"],
+  ["POR","CHA","2026-02-28"],["HOU","MIA","2026-02-28"],["TOR","WAS","2026-02-28"],["LAL","GSW","2026-02-28"],["NOP","UTA","2026-02-28"],
+  ["SAS","NYK","2026-03-01"],["CLE","BKN","2026-03-01"],["MIL","CHI","2026-03-01"],["MIN","DEN","2026-03-01"],["MEM","IND","2026-03-01"],["POR","ATL","2026-03-01"],["DET","ORL","2026-03-01"],["PHI","BOS","2026-03-01"],["OKC","DAL","2026-03-01"],["NOP","LAC","2026-03-01"],["SAC","LAL","2026-03-01"],
+  ["HOU","WAS","2026-03-02"],["BOS","MIL","2026-03-02"],["DEN","UTA","2026-03-02"],["LAC","GSW","2026-03-02"],
+  ["DAL","CHA","2026-03-03"],["DET","CLE","2026-03-03"],["WAS","ORL","2026-03-03"],["BKN","MIA","2026-03-03"],["NYK","TOR","2026-03-03"],["SAS","PHI","2026-03-03"],["OKC","CHI","2026-03-03"],["MEM","MIN","2026-03-03"],["NOP","LAL","2026-03-03"],["PHX","SAC","2026-03-03"],
+  ["OKC","NYK","2026-03-04"],["CHA","BOS","2026-03-04"],["UTA","PHI","2026-03-04"],["POR","MEM","2026-03-04"],["ATL","MIL","2026-03-04"],["IND","LAC","2026-03-04"],
+  ["DAL","ORL","2026-03-05"],["UTA","WAS","2026-03-05"],["BKN","MIA","2026-03-05"],["GSW","HOU","2026-03-05"],["TOR","MIN","2026-03-05"],["DET","SAS","2026-03-05"],["CHI","PHX","2026-03-05"],["LAL","DEN","2026-03-05"],["NOP","SAC","2026-03-05"],
+  ["DAL","BOS","2026-03-06"],["MIA","CHA","2026-03-06"],["POR","HOU","2026-03-06"],["NYK","DEN","2026-03-06"],["NOP","PHX","2026-03-06"],["LAC","SAS","2026-03-06"],["IND","LAL","2026-03-06"],
+  ["ORL","MIN","2026-03-07"],["PHI","ATL","2026-03-07"],["BKN","DET","2026-03-07"],["LAC","MEM","2026-03-07"],["UTA","MIL","2026-03-07"],["GSW","OKC","2026-03-07"],
+  ["BOS","CLE","2026-03-08"],["NYK","LAL","2026-03-08"],["DET","MIA","2026-03-08"],["DAL","TOR","2026-03-08"],["WAS","NOP","2026-03-08"],["ORL","MIL","2026-03-08"],["HOU","SAS","2026-03-08"],["CHA","PHX","2026-03-08"],["IND","POR","2026-03-08"],["CHI","SAC","2026-03-08"],
+  ["PHI","CLE","2026-03-09"],["MEM","BKN","2026-03-09"],["DEN","OKC","2026-03-09"],["GSW","UTA","2026-03-09"],["NYK","LAC","2026-03-09"],
+  ["MEM","PHI","2026-03-10"],["DET","BKN","2026-03-10"],["WAS","MIA","2026-03-10"],["DAL","ATL","2026-03-10"],["TOR","HOU","2026-03-10"],["PHX","MIL","2026-03-10"],["BOS","SAS","2026-03-10"],["CHI","GSW","2026-03-10"],["CHA","POR","2026-03-10"],["IND","SAC","2026-03-10"],["MIN","LAL","2026-03-10"],
+  ["CLE","ORL","2026-03-11"],["TOR","NOP","2026-03-11"],["NYK","UTA","2026-03-11"],["HOU","DEN","2026-03-11"],["CHA","SAC","2026-03-11"],["MIN","LAC","2026-03-11"],
+  ["PHI","DET","2026-03-12"],["PHX","IND","2026-03-12"],["WAS","ORL","2026-03-12"],["BKN","ATL","2026-03-12"],["MIL","MIA","2026-03-12"],["DAL","MEM","2026-03-12"],["DEN","SAS","2026-03-12"],["BOS","OKC","2026-03-12"],["CHI","LAL","2026-03-12"],
+  ["CLE","DAL","2026-03-13"],["MEM","DET","2026-03-13"],["NYK","IND","2026-03-13"],["PHX","TOR","2026-03-13"],["NOP","HOU","2026-03-13"],["MIN","GSW","2026-03-13"],["UTA","POR","2026-03-13"],["CHI","LAC","2026-03-13"],
+  ["BKN","PHI","2026-03-14"],["MIL","ATL","2026-03-14"],["CHA","SAS","2026-03-14"],["WAS","BOS","2026-03-14"],["ORL","MIA","2026-03-14"],["DEN","LAL","2026-03-14"],["SAC","LAC","2026-03-14"],
+  ["MIN","OKC","2026-03-15"],["DAL","CLE","2026-03-15"],["DET","TOR","2026-03-15"],["IND","MIL","2026-03-15"],["POR","PHI","2026-03-15"],["GSW","NYK","2026-03-15"],["UTA","SAC","2026-03-15"],
+  ["ORL","ATL","2026-03-16"],["GSW","WAS","2026-03-16"],["POR","BKN","2026-03-16"],["PHX","BOS","2026-03-16"],["MEM","CHI","2026-03-16"],["DAL","NOP","2026-03-16"],["LAL","HOU","2026-03-16"],["SAS","LAC","2026-03-16"],
+  ["MIA","CHA","2026-03-17"],["OKC","ORL","2026-03-17"],["DET","WAS","2026-03-17"],["IND","NYK","2026-03-17"],["CLE","MIL","2026-03-17"],["PHX","MIN","2026-03-17"],["PHI","DEN","2026-03-17"],["SAS","SAC","2026-03-17"],
+  ["GSW","BOS","2026-03-18"],["OKC","BKN","2026-03-18"],["POR","IND","2026-03-18"],["TOR","CHI","2026-03-18"],["UTA","MIN","2026-03-18"],["LAC","NOP","2026-03-18"],["DEN","MEM","2026-03-18"],["ATL","DAL","2026-03-18"],["LAL","HOU","2026-03-18"],
+  ["ORL","CHA","2026-03-19"],["DET","WAS","2026-03-19"],["LAL","MIA","2026-03-19"],["CLE","CHI","2026-03-19"],["LAC","NOP","2026-03-19"],["PHX","SAS","2026-03-19"],["MIL","UTA","2026-03-19"],["PHI","SAC","2026-03-19"],
+  ["NYK","BKN","2026-03-20"],["GSW","DET","2026-03-20"],["ATL","HOU","2026-03-20"],["BOS","MEM","2026-03-20"],["POR","MIN","2026-03-20"],["TOR","DEN","2026-03-20"],
+  ["OKC","WAS","2026-03-21"],["MEM","CHA","2026-03-21"],["LAL","ORL","2026-03-21"],["CLE","NOP","2026-03-21"],["GSW","ATL","2026-03-21"],["MIA","HOU","2026-03-21"],["IND","SAS","2026-03-21"],["LAC","DAL","2026-03-21"],["PHI","UTA","2026-03-21"],["MIL","PHX","2026-03-21"],
+  ["POR","DEN","2026-03-22"],["BKN","SAC","2026-03-22"],["WAS","NYK","2026-03-22"],["MIN","BOS","2026-03-22"],["TOR","PHX","2026-03-22"],
+  ["LAL","DET","2026-03-23"],["IND","ORL","2026-03-23"],["OKC","PHI","2026-03-23"],["SAS","MIA","2026-03-23"],["MEM","ATL","2026-03-23"],["HOU","CHI","2026-03-23"],["TOR","UTA","2026-03-23"],["GSW","DAL","2026-03-23"],["BKN","POR","2026-03-23"],["MIL","LAC","2026-03-23"],
+  ["SAC","CHA","2026-03-24"],["NOP","NYK","2026-03-24"],["ORL","CLE","2026-03-24"],["DEN","PHX","2026-03-24"],
+  ["ATL","DET","2026-03-25"],["LAL","IND","2026-03-25"],["CHI","PHI","2026-03-25"],["OKC","BOS","2026-03-25"],["MIA","CLE","2026-03-25"],["SAS","MEM","2026-03-25"],["WAS","UTA","2026-03-25"],["HOU","MIN","2026-03-25"],["DAL","DEN","2026-03-25"],["BKN","GSW","2026-03-25"],["MIL","POR","2026-03-25"],["TOR","LAC","2026-03-25"],
+  ["NYK","CHA","2026-03-26"],["NOP","DET","2026-03-26"],["SAC","ORL","2026-03-26"],
+  ["LAC","IND","2026-03-27"],["ATL","BOS","2026-03-27"],["MIA","CLE","2026-03-27"],["HOU","MEM","2026-03-27"],["CHI","OKC","2026-03-27"],["NOP","TOR","2026-03-27"],["UTA","DEN","2026-03-27"],["WAS","GSW","2026-03-27"],["DAL","POR","2026-03-27"],["BKN","LAL","2026-03-27"],
+  ["SAS","MIL","2026-03-28"],["PHI","CHA","2026-03-28"],["SAC","ATL","2026-03-28"],["CHI","MEM","2026-03-28"],["DET","MIN","2026-03-28"],["UTA","PHX","2026-03-28"],
+  ["LAC","MIL","2026-03-29"],["MIA","IND","2026-03-29"],["SAC","BKN","2026-03-29"],["BOS","CHA","2026-03-29"],["ORL","TOR","2026-03-29"],["WAS","POR","2026-03-29"],["HOU","NOP","2026-03-29"],["NYK","OKC","2026-03-29"],["GSW","DEN","2026-03-29"],
+  ["PHI","MIA","2026-03-30"],["BOS","ATL","2026-03-30"],["PHX","MEM","2026-03-30"],["CHI","SAS","2026-03-30"],["MIN","DAL","2026-03-30"],["CLE","UTA","2026-03-30"],["DET","OKC","2026-03-30"],["WAS","LAL","2026-03-30"],
+  ["PHX","ORL","2026-03-31"],["CHA","BKN","2026-03-31"],["TOR","DET","2026-03-31"],["NYK","HOU","2026-03-31"],["DAL","MIL","2026-03-31"],["CLE","LAL","2026-03-31"],["POR","LAC","2026-03-31"],
+  ["PHI","WAS","2026-04-01"],["BOS","MIA","2026-04-01"],["ATL","ORL","2026-04-01"],["IND","CHI","2026-04-01"],["MIL","HOU","2026-04-01"],["NYK","MEM","2026-04-01"],["SAC","TOR","2026-04-01"],["DEN","UTA","2026-04-01"],["SAS","GSW","2026-04-01"],
+  ["PHX","CHA","2026-04-02"],["MIN","DET","2026-04-02"],["LAL","OKC","2026-04-02"],["CLE","GSW","2026-04-02"],["NOP","POR","2026-04-02"],["SAS","LAC","2026-04-02"],
+  ["IND","CHA","2026-04-03"],["MIN","PHI","2026-04-03"],["ATL","BKN","2026-04-03"],["CHI","NYK","2026-04-03"],["UTA","HOU","2026-04-03"],["TOR","MEM","2026-04-03"],["BOS","MIL","2026-04-03"],["ORL","DAL","2026-04-03"],["NOP","SAC","2026-04-03"],
+  ["WAS","MIA","2026-04-04"],["SAS","DEN","2026-04-04"],["DET","PHI","2026-04-04"],
+  ["TOR","BOS","2026-04-05"],["WAS","BKN","2026-04-05"],["PHX","CHI","2026-04-05"],["MEM","MIL","2026-04-05"],["IND","CLE","2026-04-05"],["CHA","MIN","2026-04-05"],["ORL","NOP","2026-04-05"],["UTA","OKC","2026-04-05"],["LAL","DAL","2026-04-05"],["LAC","SAC","2026-04-05"],["HOU","GSW","2026-04-05"],
+  ["NYK","ATL","2026-04-06"],["DET","ORL","2026-04-06"],["CLE","MEM","2026-04-06"],["PHI","SAS","2026-04-06"],["POR","DEN","2026-04-06"],
+  ["CHI","WAS","2026-04-07"],["CHA","BOS","2026-04-07"],["MIL","BKN","2026-04-07"],["MIA","TOR","2026-04-07"],["MIN","IND","2026-04-07"],["UTA","NOP","2026-04-07"],["SAC","GSW","2026-04-07"],["OKC","LAL","2026-04-07"],["DAL","LAC","2026-04-07"],["HOU","PHX","2026-04-07"],
+  ["ATL","CLE","2026-04-08"],["MIL","DET","2026-04-08"],["MIN","ORL","2026-04-08"],["MEM","DEN","2026-04-08"],["POR","SAS","2026-04-08"],["DAL","PHX","2026-04-08"],["OKC","LAC","2026-04-08"],
+  ["MIA","TOR","2026-04-09"],["CHI","WAS","2026-04-09"],["IND","BKN","2026-04-09"],["BOS","NYK","2026-04-09"],["PHI","HOU","2026-04-09"],["LAL","GSW","2026-04-09"],
+  ["MIA","WAS","2026-04-10"],["DET","CHA","2026-04-10"],["CLE","ATL","2026-04-10"],["NOP","BOS","2026-04-10"],["PHI","IND","2026-04-10"],["TOR","NYK","2026-04-10"],["ORL","CHI","2026-04-10"],["BKN","MIL","2026-04-10"],["DAL","SAS","2026-04-10"],["OKC","DEN","2026-04-10"],["MIN","HOU","2026-04-10"],["MEM","UTA","2026-04-10"],["LAC","POR","2026-04-10"],["GSW","SAC","2026-04-10"],["PHX","LAL","2026-04-10"],
+  ["ORL","BOS","2026-04-12"],["WAS","CLE","2026-04-12"],["DET","IND","2026-04-12"],["ATL","MIA","2026-04-12"],["CHA","NYK","2026-04-12"],["MIL","PHI","2026-04-12"],["BKN","TOR","2026-04-12"],["CHI","DAL","2026-04-12"],["MEM","HOU","2026-04-12"],["GSW","LAC","2026-04-12"],["UTA","LAL","2026-04-12"],["NOP","MIN","2026-04-12"],["PHX","OKC","2026-04-12"],["SAC","POR","2026-04-12"],["DEN","SAS","2026-04-12"],
+];
+
+// Era 5 (pre-2019) lottery combination weights for 14 seeds
+const ERA5_COMBOS = [250, 199, 156, 119, 88, 63, 43, 28, 17, 11, 8, 7, 6, 5];
+
+// Pre-existing pick obligations for 2026 1st round
+// owner: who gets the pick; condition: when it conveys; fallback: who keeps if it doesn't convey
+const PICK_OBLIGATIONS = {
+  NOP: { owner: "ATL", protection: "Unprotected", condition: () => true, fallback: null },
+  LAC: { owner: "OKC", protection: "Unprotected", condition: () => true, fallback: null },
+  IND: { owner: "LAC", protection: "Conveys at 5-9 only", condition: (pos) => pos >= 5 && pos <= 9, fallback: "IND" },
+  WAS: { owner: "NYK", protection: "Top-8 protected", condition: (pos) => pos > 8, fallback: "WAS" },
+  UTA: { owner: "OKC", protection: "Top-8 protected", condition: (pos) => pos > 8, fallback: "UTA" },
+  POR: { owner: "CHI", protection: "Top-14 protected", condition: (pos) => pos > 14, fallback: "POR" },
+  PHI: { owner: "OKC", protection: "Top-4 protected", condition: (pos) => pos > 4, fallback: "PHI" },
+  HOU: { owner: "OKC", protection: "Top-4 protected", condition: (pos) => pos > 4, fallback: "HOU" },
+};
+
+// Swap rights
+const SWAP_RIGHTS = [
+  { teams: ["ATL", "MIL"], beneficiary: "ATL", desc: "Hawks get the more favorable of NOP/MIL picks" },
+  { teams: ["SAS", "ATL"], beneficiary: "SAS", desc: "Spurs swap with Hawks' own pick (Murray trade)" },
+  { teams: ["UTA", "CLE"], beneficiary: "UTA", desc: "Jazz get the more favorable pick (Mitchell trade)" },
+  { teams: ["UTA", "MIN"], beneficiary: "UTA", desc: "Jazz get the more favorable pick (Gobert trade)" },
+  { teams: ["DET", "MIN"], beneficiary: "DET", desc: "Pistons can swap for MIN's pick (top-19 protected)", protection: 19 },
+];
+
+// ============================================================
+// STATE
+// ============================================================
+
+let teamMap = {};          // abbrev -> team object
+let deadlineRanks = {};    // abbrev -> rank (1=worst)
+let deadlineLotterySet = new Set(); // the 14 lottery teams at deadline (fixed pool)
+let currentStep = 1;
+let maxStepReached = 1;
+
+// Pick ownership: lotteryTeamAbbrev -> { owner, protection, isTraded }
+let pickOwnership = {};
+let tradeHistory = [];
+
+// Simulation results
+let simResults = null;     // { teams: [...], postDeadlineWins: {} }
+
+// Lottery results
+let lotteryResults = null;
+
+// ============================================================
+// HELPERS: Pick Ownership Initialization
+// ============================================================
+
+function getProtectionDisplay(abbrev) {
+  const obl = PICK_OBLIGATIONS[abbrev];
+  if (!obl) return "None";
+  if (obl.protection === "Unprotected") return obl.protection;
+  return `${obl.protection} (→ ${obl.owner})`;
+}
+
+function initPickOwnershipForLottery(lotteryTeams) {
+  const lotteryAbbrevs = new Set(lotteryTeams.map(t => t.abbrev));
+
+  lotteryTeams.forEach((t, i) => {
+    const seed = i + 1;
+    const obl = PICK_OBLIGATIONS[t.abbrev];
+
+    // Check if swap rights from a non-lottery team effectively claim this pick
+    // (a non-lottery beneficiary will always exercise the swap since any lottery pick beats theirs)
+    const activeSwap = SWAP_RIGHTS.find(swap =>
+      swap.teams.includes(t.abbrev) &&
+      swap.beneficiary !== t.abbrev &&
+      !lotteryAbbrevs.has(swap.beneficiary)
+    );
+
+    if (obl) {
+      // Check if the obligation would convey at this team's lottery seed
+      const wouldConvey = obl.condition(seed);
+      if (wouldConvey) {
+        // Obligation is resolved — pick belongs to obligation holder (e.g. NOP→ATL unprotected)
+        pickOwnership[t.abbrev] = {
+          owner: obl.owner,
+          protection: getProtectionDisplay(t.abbrev),
+          isTraded: true,
+          originalObligation: true,
+          isResolvedObligation: true,
+        };
+      } else {
+        // Protection keeps pick with team — they must still trade under the proposal
+        pickOwnership[t.abbrev] = {
+          owner: t.abbrev,
+          protection: getProtectionDisplay(t.abbrev),
+          isTraded: false,
+          originalObligation: false,
+          isResolvedObligation: false,
+        };
+      }
+    } else if (activeSwap) {
+      // Swap rights from a non-lottery team will claim this pick
+      // Owner stays as the team (so applySwapRights still works at draft time)
+      // but isTraded=true so they don't need to trade under the proposal
+      pickOwnership[t.abbrev] = {
+        owner: t.abbrev,
+        protection: `Swap → ${activeSwap.beneficiary}`,
+        isTraded: true,
+        originalObligation: false,
+        isResolvedObligation: false,
+        swapTarget: activeSwap.beneficiary,
+      };
+    } else {
+      pickOwnership[t.abbrev] = {
+        owner: t.abbrev,
+        protection: "None",
+        isTraded: false,
+        originalObligation: false,
+        isResolvedObligation: false,
+      };
+    }
+  });
+}
+
+// ============================================================
+// INIT
+// ============================================================
+
+function init() {
+  // Build team map
+  TEAMS.forEach(t => {
+    t.gp = t.w + t.l;
+    t.winPct = t.w / t.gp;
+    teamMap[t.abbrev] = t;
+  });
+
+  // Sort by win% (worst first) to determine deadline ranks
+  const sorted = [...TEAMS].sort((a, b) => a.winPct - b.winPct || b.l - a.l);
+  sorted.forEach((t, i) => { deadlineRanks[t.abbrev] = i + 1; });
+
+  // Fix the 14 lottery teams at the deadline (this pool never changes)
+  const lotteryTeams = sorted.slice(0, 14);
+  lotteryTeams.forEach(t => deadlineLotterySet.add(t.abbrev));
+  initPickOwnershipForLottery(lotteryTeams);
+
+  renderStep1();
+  renderStep2();
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+
+function goToStep(step) {
+  if (step > maxStepReached + 1) return;
+  if (step > maxStepReached) maxStepReached = step;
+  currentStep = step;
+
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`panel-${step}`).classList.add('active');
+
+  document.querySelectorAll('.step-indicator').forEach(el => {
+    const s = parseInt(el.dataset.step);
+    el.classList.remove('active', 'completed');
+    if (s === step) el.classList.add('active');
+    else if (s < maxStepReached || (s <= maxStepReached && s < step)) el.classList.add('completed');
+    else if (s < step) el.classList.add('completed');
+  });
+
+  // Re-render relevant panels
+  if (step === 2) renderStep2();
+  if (step === 4 && simResults) renderStep4PreLottery();
+}
+
+// ============================================================
+// STEP 1: Standings
+// ============================================================
+
+function renderStep1() {
+  const sorted = [...TEAMS].sort((a, b) => a.winPct - b.winPct || b.l - a.l);
+  const tbody = document.querySelector('#standings-table tbody');
+  tbody.innerHTML = '';
+
+  sorted.forEach((t, i) => {
+    const rank = i + 1;
+    const isLottery = rank <= 14;
+    const isBubble = rank > 14 && rank <= 20;
+    const tr = document.createElement('tr');
+    if (isLottery) tr.classList.add('lottery-team');
+    if (isBubble) tr.classList.add('bubble-team');
+    tr.innerHTML = `
+      <td>${rank}${isLottery ? '' : isBubble ? ' <span class="badge badge-blue" style="font-size:0.65rem;">Bubble</span>' : ''}</td>
+      <td><strong>${t.abbrev}</strong> ${t.name}</td>
+      <td>${t.w}</td>
+      <td>${t.l}</td>
+      <td>${t.winPct.toFixed(3)}</td>
+      <td>${t.conf}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Pick map
+  const pickTbody = document.querySelector('#pick-map-table tbody');
+  pickTbody.innerHTML = '';
+  const lotteryTeams = sorted.slice(0, 14);
+  lotteryTeams.forEach((t, i) => {
+    const pick = pickOwnership[t.abbrev];
+    const ownerDisplay = pick.owner === t.abbrev
+      ? (pick.swapTarget ? t.abbrev + ' (→ ' + pick.swapTarget + ' via swap)' : t.abbrev + ' (own)')
+      : pick.owner;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${i + 1}</td>
+      <td><strong>${t.abbrev}</strong></td>
+      <td>${ownerDisplay}</td>
+      <td>${pick.protection}</td>
+      <td>${!pick.isTraded ? '<span class="must-trade">Must Trade</span>' : '<span class="traded-ok">Traded</span>'}</td>
+    `;
+    pickTbody.appendChild(tr);
+  });
+}
+
+// ============================================================
+// STEP 2: Trades
+// ============================================================
+
+function getLotteryTeamsSorted() {
+  return [...TEAMS].sort((a, b) => a.winPct - b.winPct || b.l - a.l).slice(0, 14);
+}
+
+function renderStep2() {
+  const lotteryTeams = getLotteryTeamsSorted();
+
+  // Populate trade dropdowns
+  const selA = document.getElementById('trade-pick-a');
+  const selB = document.getElementById('trade-pick-b');
+  const prevA = selA.value;
+  const prevB = selB.value;
+  selA.innerHTML = '';
+  selB.innerHTML = '';
+
+  // All 30 teams' picks can be involved in swaps
+  const allSorted = [...TEAMS].sort((a, b) => a.winPct - b.winPct || b.l - a.l);
+  const lotteryAbbrevs = new Set(lotteryTeams.map(t => t.abbrev));
+
+  // For Pick A: show lottery team picks
+  lotteryTeams.forEach(t => {
+    const pick = pickOwnership[t.abbrev];
+    const opt = document.createElement('option');
+    opt.value = t.abbrev;
+    opt.textContent = `${t.abbrev}'s pick (owned by ${pick.owner})`;
+    selA.appendChild(opt);
+  });
+
+  // For Pick B: show all lottery team picks (for swapping between lottery picks)
+  lotteryTeams.forEach(t => {
+    const pick = pickOwnership[t.abbrev];
+    const opt = document.createElement('option');
+    opt.value = t.abbrev;
+    opt.textContent = `${t.abbrev}'s pick (owned by ${pick.owner})`;
+    selB.appendChild(opt);
+  });
+
+  if (prevA) selA.value = prevA;
+  if (prevB) selB.value = prevB;
+
+  // Trade pick table
+  const tbody = document.querySelector('#trade-pick-table tbody');
+  tbody.innerHTML = '';
+  lotteryTeams.forEach((t, i) => {
+    const pick = pickOwnership[t.abbrev];
+    const seed = i + 1;
+    const floor = Math.min(seed + 2, 14);
+    const ownerDisplay = pick.owner === t.abbrev
+      ? (pick.swapTarget ? t.abbrev + ' (→ ' + pick.swapTarget + ' via swap)' : t.abbrev + ' (own)')
+      : pick.owner;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${seed}</td>
+      <td><strong>${t.abbrev}</strong></td>
+      <td>${ownerDisplay}</td>
+      <td>${pick.protection}</td>
+      <td>#${floor}</td>
+      <td>${!pick.isTraded ? '<span class="must-trade">Yes — must swap</span>' : '<span class="traded-ok">No</span>'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Trade history
+  const histDiv = document.getElementById('trade-history');
+  const histCard = document.getElementById('trade-history-card');
+  if (tradeHistory.length > 0) {
+    histCard.style.display = 'block';
+    histDiv.innerHTML = '';
+    tradeHistory.forEach((trade, i) => {
+      const div = document.createElement('div');
+      div.className = 'trade-item';
+      div.innerHTML = `
+        <span>${trade.ownerA} receives <strong>${trade.pickB}'s pick</strong> &harr;
+        ${trade.ownerB} receives <strong>${trade.pickA}'s pick</strong></span>
+        <button class="undo-btn" onclick="undoTrade(${i})">Undo</button>
+      `;
+      histDiv.appendChild(div);
+    });
+  } else {
+    histCard.style.display = 'none';
+  }
+}
+
+function executeTrade() {
+  const pickATeam = document.getElementById('trade-pick-a').value;
+  const pickBTeam = document.getElementById('trade-pick-b').value;
+  if (pickATeam === pickBTeam) { alert('Cannot swap a pick with itself.'); return; }
+
+  const pickA = pickOwnership[pickATeam];
+  const pickB = pickOwnership[pickBTeam];
+
+  // Record trade
+  tradeHistory.push({
+    pickA: pickATeam,
+    pickB: pickBTeam,
+    ownerA: pickA.owner,
+    ownerB: pickB.owner,
+  });
+
+  // Swap owners
+  const tempOwner = pickA.owner;
+  pickA.owner = pickB.owner;
+  pickB.owner = tempOwner;
+
+  // Mark as traded (user-initiated swap means both picks are now traded)
+  pickA.isTraded = true;
+  pickB.isTraded = true;
+
+  renderStep2();
+}
+
+function undoTrade(index) {
+  // Remove only this trade, keep all others
+  const savedTrades = [...tradeHistory.slice(0, index), ...tradeHistory.slice(index + 1)];
+
+  // Reset all to original state
+  const lotteryTeams = getLotteryTeamsSorted();
+  initPickOwnershipForLottery(lotteryTeams);
+
+  // Re-apply remaining trades
+  tradeHistory = [];
+  savedTrades.forEach(trade => {
+    const pickA = pickOwnership[trade.pickA];
+    const pickB = pickOwnership[trade.pickB];
+    tradeHistory.push({
+      pickA: trade.pickA, pickB: trade.pickB,
+      ownerA: pickA.owner, ownerB: pickB.owner,
+    });
+    const tempOwner = pickA.owner;
+    pickA.owner = pickB.owner;
+    pickB.owner = tempOwner;
+    pickA.isTraded = true;
+    pickB.isTraded = true;
+  });
+
+  renderStep2();
+}
+
+function loadDefaultScenario() {
+  // Reset to initial state
+  const lotteryTeams = getLotteryTeamsSorted();
+  initPickOwnershipForLottery(lotteryTeams);
+  tradeHistory = [];
+
+  // 6 swaps to clear all 14 lottery picks
+  // Already traded: NOP (#2 → ATL), LAC (#10 → OKC), ATL (#14 → SAS via swap rights)
+  const defaultTrades = [
+    ["SAC", "NOP"],  // Kings #1 ↔ Pelicans #2 (owned by ATL) — ATL gives up NOP pick to get SAC's top pick
+    ["IND", "UTA"],  // Pacers #3 ↔ Jazz #6 — IND's 5-9 protection to LAC makes this interesting for both
+    ["WAS", "BKN"],  // Wizards #4 ↔ Nets #5
+    ["DAL", "MEM"],  // Mavericks #7 ↔ Grizzlies #8
+    ["MIL", "POR"],  // Bucks #9 ↔ Trail Blazers #11
+    ["CHA", "CHI"],  // Hornets #12 ↔ Bulls #13
+  ];
+
+  defaultTrades.forEach(([teamA, teamB]) => {
+    const pickA = pickOwnership[teamA];
+    const pickB = pickOwnership[teamB];
+    tradeHistory.push({
+      pickA: teamA, pickB: teamB,
+      ownerA: pickA.owner, ownerB: pickB.owner,
+    });
+    const tempOwner = pickA.owner;
+    pickA.owner = pickB.owner;
+    pickB.owner = tempOwner;
+    pickA.isTraded = true;
+    pickB.isTraded = true;
+  });
+
+  renderStep2();
+}
+
+// ============================================================
+// STEP 3: Simulate Season
+// ============================================================
+
+function log5(pA, pB) {
+  return (pA - pA * pB) / (pA + pB - 2 * pA * pB);
+}
+
+function simulateSeason() {
+  // Clone team data
+  const teams = {};
+  TEAMS.forEach(t => {
+    teams[t.abbrev] = {
+      abbrev: t.abbrev, name: t.name, conf: t.conf,
+      w: t.w, l: t.l,
+      simW: 0, simL: 0,
+      ability: t.winPct,
+    };
+  });
+
+  const HCA = 0.03;
+
+  // Simulate each game
+  SCHEDULE.forEach(([away, home]) => {
+    const homeTeam = teams[home];
+    const awayTeam = teams[away];
+    if (!homeTeam || !awayTeam) return;
+
+    const pHome = Math.min(homeTeam.ability + HCA, 0.95);
+    const pAway = Math.max(awayTeam.ability - HCA, 0.05);
+
+    // Clamp for log5
+    const pH = Math.max(0.01, Math.min(0.99, pHome));
+    const pA = Math.max(0.01, Math.min(0.99, pAway));
+    const prob = log5(pH, pA);
+    const homeWins = Math.random() < prob;
+
+    if (homeWins) {
+      homeTeam.w++; homeTeam.simW++;
+      awayTeam.l++; awayTeam.simL++;
+    } else {
+      awayTeam.w++; awayTeam.simW++;
+      homeTeam.l++; homeTeam.simL++;
+    }
+  });
+
+  // Sort by record (worst first)
+  const sorted = Object.values(teams).sort((a, b) => {
+    const wpA = a.w / (a.w + a.l);
+    const wpB = b.w / (b.w + b.l);
+    return wpA - wpB || b.l - a.l;
+  });
+
+  // Calculate post-deadline wins for each team
+  const postDeadlineWins = {};
+  Object.values(teams).forEach(t => { postDeadlineWins[t.abbrev] = t.simW; });
+
+  simResults = {
+    teams: sorted,
+    postDeadlineWins,
+    endRanks: {},
+  };
+  sorted.forEach((t, i) => { simResults.endRanks[t.abbrev] = i + 1; });
+
+  renderSimResults();
+
+  document.getElementById('sim-btn').style.display = 'none';
+  document.getElementById('resim-btn').style.display = 'inline-flex';
+  document.getElementById('to-lottery-btn').disabled = false;
+  maxStepReached = Math.max(maxStepReached, 3);
+}
+
+function renderSimResults() {
+  const div = document.getElementById('sim-results');
+
+  let html = `
+    <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;">
+      Simulated final standings. "Move" shows how many spots the team moved from their deadline ranking.
+    </p>
+    <div class="table-wrapper">
+    <table class="sim-table">
+      <thead><tr><th>#</th><th>Team</th><th>W</th><th>L</th><th>Win%</th><th>Deadline Rank</th><th>Move</th></tr></thead>
+      <tbody>
+  `;
+
+  simResults.teams.forEach((t, i) => {
+    const rank = i + 1;
+    const dRank = deadlineRanks[t.abbrev];
+    const move = dRank - rank;
+    let moveClass = '';
+    let moveStr = '—';
+    if (move > 0) { moveClass = 'up'; moveStr = `▲${move}`; }
+    else if (move < 0) { moveClass = 'down'; moveStr = `▼${Math.abs(move)}`; }
+
+    const isLottery = deadlineLotterySet.has(t.abbrev);
+    const isBubble = !isLottery && dRank > 14 && dRank <= 20;
+    html += `<tr class="${isLottery ? 'lottery-team' : isBubble ? 'bubble-team' : ''}">
+      <td>${rank}</td>
+      <td><strong>${t.abbrev}</strong> ${t.name}</td>
+      <td>${t.w}</td>
+      <td>${t.l}</td>
+      <td>${(t.w / (t.w + t.l)).toFixed(3)}</td>
+      <td>${dRank}</td>
+      <td class="${moveClass}">${moveStr}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  div.innerHTML = html;
+}
+
+// ============================================================
+// STEP 4: Lottery
+// ============================================================
+
+function getDeadlineLotteryFromSim() {
+  // Get the 14 deadline lottery teams from sim results (ordered by sim record, worst first)
+  return simResults.teams.filter(t => deadlineLotterySet.has(t.abbrev));
+}
+
+function renderStep4PreLottery() {
+  if (!simResults) return;
+
+  const lotteryTeams = getDeadlineLotteryFromSim();
+  const board = document.getElementById('pre-lottery-board');
+
+  // Apply 2-back provision
+  const seeds = computeLotterySeeds(lotteryTeams);
+
+  let html = `<div class="table-wrapper"><table>
+    <thead><tr><th>Seed</th><th>Team</th><th>Final Record</th><th>Deadline Seed</th><th>End Seed</th><th>Capped</th><th>Pick Owner</th><th>Status</th></tr></thead>
+    <tbody>`;
+
+  seeds.forEach((s, i) => {
+    const isTraded = pickOwnership[s.abbrev] ? pickOwnership[s.abbrev].isTraded : false;
+    const owner = pickOwnership[s.abbrev] ? pickOwnership[s.abbrev].owner : s.abbrev;
+    const wasCapped = s.cappedRank < s.endRank;
+    html += `<tr${wasCapped ? ' style="background:#d1fae5;"' : ''}>
+      <td><strong>${i + 1}</strong></td>
+      <td><strong>${s.abbrev}</strong></td>
+      <td>${s.w}-${s.l}</td>
+      <td>${s.deadlineRank}</td>
+      <td>${s.endRank}</td>
+      <td>${wasCapped
+        ? '<strong style="color:var(--green)">' + s.cappedRank + '</strong> <span class="badge badge-green" style="font-size:0.65rem">2-BACK</span>'
+        : s.cappedRank}</td>
+      <td>${owner}</td>
+      <td>${isTraded ? '<span class="badge badge-green">Traded</span>' : '<span class="badge badge-red">Untraded</span>'}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  board.innerHTML = html;
+
+  // Reset lottery
+  document.getElementById('lottery-results').innerHTML = '';
+  document.getElementById('full-draft-card').style.display = 'none';
+  document.getElementById('lottery-btn').style.display = 'inline-flex';
+  document.getElementById('relottery-btn').style.display = 'none';
+}
+
+function computeLotterySeeds(lotteryTeams) {
+  // lotteryTeams: the 14 deadline lottery teams, already sorted by sim record (worst first)
+  // Compute within-group ranks (1-14) at both deadline and end-of-season
+
+  // Deadline lottery rank: sort the 14 by their deadline record (worst first = rank 1)
+  const byDeadline = [...lotteryTeams].sort((a, b) => {
+    const wpA = teamMap[a.abbrev].winPct;
+    const wpB = teamMap[b.abbrev].winPct;
+    return wpA - wpB || teamMap[b.abbrev].l - teamMap[a.abbrev].l;
+  });
+  const deadlineLotteryRank = {};
+  byDeadline.forEach((t, i) => { deadlineLotteryRank[t.abbrev] = i + 1; });
+
+  // End-of-season lottery rank: sort the 14 by their simulated record (worst first = rank 1)
+  const byEndSeason = [...lotteryTeams].sort((a, b) => {
+    const wpA = a.w / (a.w + a.l);
+    const wpB = b.w / (b.w + b.l);
+    return wpA - wpB || b.l - a.l;
+  });
+  const endLotteryRank = {};
+  byEndSeason.forEach((t, i) => { endLotteryRank[t.abbrev] = i + 1; });
+
+  // Apply 2-back cap using within-group ranks
+  const withCap = byEndSeason.map(t => {
+    const endRank = endLotteryRank[t.abbrev];
+    const dRank = deadlineLotteryRank[t.abbrev];
+    // 2-back: pick can fall at most 2 positions within the lottery group
+    const cappedRank = Math.min(endRank, dRank + 2);
+    return {
+      abbrev: t.abbrev,
+      name: t.name,
+      w: t.w, l: t.l,
+      endRank,
+      deadlineRank: dRank,
+      cappedRank,
+      postDeadlineWins: simResults.postDeadlineWins[t.abbrev] || 0,
+    };
+  });
+
+  // Sort by capped rank, breaking ties with post-deadline wins (fewer wins = worse = better pick)
+  withCap.sort((a, b) => {
+    if (a.cappedRank !== b.cappedRank) return a.cappedRank - b.cappedRank;
+    // Tiebreaker: fewer post-deadline wins gets the better (lower) seed
+    return a.postDeadlineWins - b.postDeadlineWins;
+  });
+
+  return withCap;
+}
+
+function runLottery() {
+  if (!simResults) return;
+
+  const lotteryTeams = getDeadlineLotteryFromSim();
+  const seeds = computeLotterySeeds(lotteryTeams);
+
+  // Separate traded vs untraded picks
+  const tradedSeeds = [];
+  const untradedSeeds = [];
+  seeds.forEach((s, i) => {
+    const po = pickOwnership[s.abbrev];
+    const isTraded = po ? po.isTraded : false;
+    s.seed = i + 1;
+    s.isTraded = isTraded;
+    s.pickOwner = po ? po.owner : s.abbrev;
+    if (isTraded) tradedSeeds.push(s);
+    else untradedSeeds.push(s);
+  });
+
+  // Draw top 3 from traded picks only
+  const top3 = [];
+  const remainingTraded = [...tradedSeeds];
+
+  for (let draw = 0; draw < 3 && remainingTraded.length > 0; draw++) {
+    // Build probability weights for remaining traded picks
+    let totalWeight = 0;
+    const weights = remainingTraded.map(s => {
+      const w = ERA5_COMBOS[s.seed - 1] || 1;
+      totalWeight += w;
+      return w;
+    });
+
+    // Weighted random selection
+    let rand = Math.random() * totalWeight;
+    let selectedIdx = 0;
+    for (let i = 0; i < weights.length; i++) {
+      rand -= weights[i];
+      if (rand <= 0) { selectedIdx = i; break; }
+    }
+
+    top3.push(remainingTraded[selectedIdx]);
+    remainingTraded.splice(selectedIdx, 1);
+  }
+
+  // Remaining picks fill 4-14 by seed order
+  const remaining = [...remainingTraded, ...untradedSeeds].sort((a, b) => a.seed - b.seed);
+
+  // Full lottery order
+  const lotteryOrder = [...top3, ...remaining];
+  lotteryOrder.forEach((s, i) => { s.lotteryPick = i + 1; });
+
+  lotteryResults = lotteryOrder;
+
+  renderLotteryResults();
+
+  document.getElementById('lottery-btn').style.display = 'none';
+  document.getElementById('relottery-btn').style.display = 'inline-flex';
+  maxStepReached = Math.max(maxStepReached, 4);
+}
+
+function renderLotteryResults() {
+  const div = document.getElementById('lottery-results');
+  let html = '<h3 style="margin-bottom:0.75rem;color:var(--navy);">Lottery Results</h3>';
+
+  lotteryResults.forEach((s, i) => {
+    const pickNum = i + 1;
+    const isTop3 = pickNum <= 3;
+    const cls = isTop3 ? 'top3' : 'regular';
+    const untradedCls = !s.isTraded ? ' untraded' : '';
+    const wasCapped = s.cappedRank < s.endRank;
+
+    html += `<div class="lottery-pick ${cls}${untradedCls}">
+      <div class="pick-num">${pickNum}</div>
+      <div class="team-name">
+        ${s.abbrev} — ${s.name || teamMap[s.abbrev]?.name || ''}
+        ${!s.isTraded ? ' <span class="badge badge-red">Untraded</span>' : ''}
+        ${wasCapped ? ' <span class="badge badge-green">2-Back: would have been #' + s.endRank + '</span>' : ''}
+      </div>
+      <div class="pick-source">
+        Seed: ${s.seed} | Owner: ${s.pickOwner}
+      </div>
+    </div>`;
+  });
+
+  div.innerHTML = html;
+
+  // Build full draft order
+  buildFullDraftOrder();
+}
+
+function buildFullDraftOrder() {
+  // Resolve pick protections and build full 30-pick order
+  const fullOrder = [];
+
+  // Lottery picks (1-14): apply protections and obligations
+  const lotteryPicks = lotteryResults.map((s, i) => {
+    const pos = i + 1;
+    const teamAbbrev = s.abbrev;
+    const po = pickOwnership[teamAbbrev];
+    const obl = PICK_OBLIGATIONS[teamAbbrev];
+
+    let selectingTeam = po ? po.owner : teamAbbrev;
+    let via = '';
+    let notes = '';
+
+    if (obl) {
+      if (obl.condition(pos)) {
+        // Obligation triggers — pick conveys
+        if (po && po.isResolvedObligation) {
+          // Pre-resolved (unprotected): current owner gets it (may have been user-traded)
+          selectingTeam = po.owner;
+        } else {
+          // Protection failed — obligation holder gets it regardless of user trades
+          selectingTeam = obl.owner;
+        }
+        via = teamAbbrev !== selectingTeam ? teamAbbrev : '';
+        notes = `Conveyed (${obl.protection})`;
+      } else {
+        // Protection applies — current owner (team or user-traded partner) gets it
+        selectingTeam = po ? po.owner : (obl.fallback || teamAbbrev);
+        via = teamAbbrev !== selectingTeam ? teamAbbrev : '';
+        notes = `Protected (${obl.protection})`;
+      }
+    } else {
+      // No obligation — current owner gets it
+      selectingTeam = po ? po.owner : teamAbbrev;
+      via = teamAbbrev !== selectingTeam ? teamAbbrev : '';
+    }
+
+    return { pick: pos, team: selectingTeam, via, notes };
+  });
+
+  // Non-lottery picks (15-30): teams NOT in the deadline lottery pool, sorted worst-first
+  const nonLotteryByRank = simResults.teams
+    .filter(t => !deadlineLotterySet.has(t.abbrev))
+    .sort((a, b) => {
+      const wpA = a.w / (a.w + a.l);
+      const wpB = b.w / (b.w + b.l);
+      return wpA - wpB || b.l - a.l;
+    });
+
+  const nonLotteryPicks = nonLotteryByRank.map((t, i) => {
+    const pos = 15 + i;
+    let selectingTeam = t.abbrev;
+    let via = '';
+    let notes = '';
+
+    // Check obligations for non-lottery teams
+    const obl = PICK_OBLIGATIONS[t.abbrev];
+    if (obl && obl.condition(pos)) {
+      selectingTeam = obl.owner;
+      via = t.abbrev;
+      notes = `Conveyed (${obl.protection})`;
+    } else if (obl && !obl.condition(pos)) {
+      selectingTeam = obl.fallback || t.abbrev;
+      notes = `Protected (${obl.protection})`;
+    }
+
+    return { pick: pos, team: selectingTeam, via, notes };
+  });
+
+  const allPicks = [...lotteryPicks, ...nonLotteryPicks];
+
+  // Apply swap rights
+  applySwapRights(allPicks);
+
+  // Apply OKC pick distribution
+  applyOKCDistribution(allPicks);
+
+  // Render
+  const tbody = document.querySelector('#full-draft-table tbody');
+  tbody.innerHTML = '';
+  allPicks.forEach(p => {
+    const tr = document.createElement('tr');
+    const teamData = teamMap[p.team];
+    tr.innerHTML = `
+      <td>${p.pick}</td>
+      <td><strong>${p.team}</strong> ${teamData ? teamData.name : ''}</td>
+      <td>${p.via ? `via ${p.via}` : '—'}</td>
+      <td>${p.notes || '—'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('full-draft-card').style.display = 'block';
+}
+
+function applySwapRights(allPicks) {
+  SWAP_RIGHTS.forEach(swap => {
+    // Find picks for both teams
+    const pickIndices = [];
+    swap.teams.forEach(team => {
+      allPicks.forEach((p, i) => {
+        if (p.team === team) pickIndices.push({ team, index: i, pick: p.pick });
+      });
+    });
+
+    if (pickIndices.length < 2) return;
+
+    // Find the beneficiary's pick and the other team's pick
+    const beneficiaryPick = pickIndices.find(p => p.team === swap.beneficiary);
+    const otherPick = pickIndices.find(p => p.team !== swap.beneficiary);
+
+    if (!beneficiaryPick || !otherPick) return;
+
+    // Beneficiary gets the more favorable (lower number) pick
+    if (otherPick.pick < beneficiaryPick.pick) {
+      // Check protection
+      if (swap.protection && otherPick.pick > swap.protection) return;
+
+      // Swap
+      const temp = allPicks[beneficiaryPick.index].team;
+      allPicks[beneficiaryPick.index].team = swap.beneficiary;
+      allPicks[beneficiaryPick.index].notes = `Swapped (${swap.desc})`;
+      allPicks[beneficiaryPick.index].via = allPicks[beneficiaryPick.index].via || otherPick.team;
+
+      allPicks[otherPick.index].team = temp;
+      allPicks[otherPick.index].notes = 'Swapped away';
+    }
+  });
+}
+
+function applyOKCDistribution(allPicks) {
+  // OKC may end up with picks from LAC, HOU, PHI, plus their own
+  // OKC keeps most favorable; 2nd goes to PHI; 3rd goes to DAL
+  const okcPickIndices = [];
+  allPicks.forEach((p, i) => {
+    if (p.team === 'OKC') okcPickIndices.push(i);
+  });
+
+  if (okcPickIndices.length <= 1) return;
+
+  // Sort OKC's picks by pick number (best = lowest first)
+  okcPickIndices.sort((a, b) => allPicks[a].pick - allPicks[b].pick);
+
+  // OKC keeps the best
+  // 2nd best → PHI (via Jared McCain trade)
+  // 3rd best → DAL
+  if (okcPickIndices.length >= 2) {
+    const secondIdx = okcPickIndices[1];
+    allPicks[secondIdx].team = 'PHI';
+    allPicks[secondIdx].notes = 'Via OKC distribution (2nd most favorable)';
+  }
+  if (okcPickIndices.length >= 3) {
+    const thirdIdx = okcPickIndices[2];
+    allPicks[thirdIdx].team = 'DAL';
+    allPicks[thirdIdx].notes = 'Via OKC distribution (3rd most favorable)';
+  }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+
+init();
+</script>
+</body>
+</html>
