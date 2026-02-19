@@ -238,7 +238,7 @@ tr.bubble-team:nth-child(even) td { background: #e8eeff; }
       </div>
       <div style="margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border); display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
         <button class="btn btn-outline btn-sm" onclick="loadDefaultScenario()">Load Example Scenario</button>
-        <span style="font-size:0.82rem;color:var(--text-muted);">Pre-fills 9 swaps: 6 lottery + 3 bubble team insurance swaps</span>
+        <span style="font-size:0.82rem;color:var(--text-muted);">Pre-fills 8 swaps: 6 lottery + 2 bubble team insurance swaps</span>
       </div>
     </div>
 
@@ -506,11 +506,11 @@ function initPickOwnershipForLottery(trackedTeams) {
       !lotteryAbbrevs.has(swap.beneficiary)
     );
 
-    if (isLottery && obl) {
-      // Check if the obligation would convey at this team's lottery seed
+    if (obl) {
+      // Check if the obligation would convey at this team's seed
       const wouldConvey = obl.condition(seed);
       if (wouldConvey) {
-        // Obligation is resolved — pick belongs to obligation holder (e.g. NOP→ATL unprotected)
+        // Obligation is resolved — pick belongs to obligation holder
         pickOwnership[t.abbrev] = {
           owner: obl.owner,
           protection: getProtectionDisplay(t.abbrev),
@@ -519,7 +519,7 @@ function initPickOwnershipForLottery(trackedTeams) {
           isResolvedObligation: true,
         };
       } else {
-        // Protection keeps pick with team — they must still trade under the proposal
+        // Protection keeps pick with team — lottery teams must still trade under the proposal
         pickOwnership[t.abbrev] = {
           owner: t.abbrev,
           protection: getProtectionDisplay(t.abbrev),
@@ -814,8 +814,8 @@ function loadDefaultScenario() {
   initPickOwnershipForLottery(trackedTeams);
   tradeHistory = [];
 
-  // 9 swaps: 6 for lottery teams + 3 for bubble teams
-  // Already traded: NOP (#2 → ATL), LAC (#10 → OKC), ATL (#14 → SAS via swap rights)
+  // 8 swaps: 6 for lottery teams + 2 for bubble teams
+  // Already traded: NOP (#2 → ATL), LAC (#10 → OKC), ATL (#14 → SAS via swap rights), PHI (#18 → OKC via obligation)
   const defaultTrades = [
     ["SAC", "NOP"],  // Kings #1 ↔ Pelicans #2 (owned by ATL) — ATL gives up NOP pick to get SAC's top pick
     ["IND", "UTA"],  // Pacers #3 ↔ Jazz #6 — IND's 5-9 protection to LAC makes this interesting for both
@@ -823,10 +823,9 @@ function loadDefaultScenario() {
     ["DAL", "MEM"],  // Mavericks #7 ↔ Grizzlies #8
     ["MIL", "POR"],  // Bucks #9 ↔ Trail Blazers #11
     ["CHA", "CHI"],  // Hornets #12 ↔ Bulls #13
-    // Bubble teams swap as insurance
+    // Bubble teams swap as insurance (PHI already conveyed to OKC)
     ["ORL", "LAL"],  // Magic #15 ↔ Lakers #20
     ["MIA", "TOR"],  // Heat #16 ↔ Raptors #19
-    ["GSW", "PHI"],  // Warriors #17 ↔ 76ers #18
   ];
 
   defaultTrades.forEach(([teamA, teamB]) => {
