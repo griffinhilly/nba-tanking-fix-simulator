@@ -369,6 +369,7 @@ const TEAMS = [
 
 // Remaining schedule: [away, home, date]
 const SCHEDULE = [
+  ["WAS","DET","2026-02-05"],["BKN","ORL","2026-02-05"],["UTA","ATL","2026-02-05"],["CHI","TOR","2026-02-05"],["CHA","HOU","2026-02-05"],["SAS","DAL","2026-02-05"],["GSW","PHX","2026-02-05"],["PHI","LAL","2026-02-05"],
   ["MIA","BOS","2026-02-06"],["NYK","DET","2026-02-06"],["IND","MIL","2026-02-06"],["NOP","MIN","2026-02-06"],["MEM","POR","2026-02-06"],["LAC","SAC","2026-02-06"],
   ["WAS","BKN","2026-02-07"],["HOU","OKC","2026-02-07"],["DAL","SAS","2026-02-07"],["UTA","ORL","2026-02-07"],["CHA","ATL","2026-02-07"],["DEN","CHI","2026-02-07"],["GSW","LAL","2026-02-07"],["PHI","PHX","2026-02-07"],["MEM","POR","2026-02-07"],["CLE","SAC","2026-02-07"],
   ["NYK","BOS","2026-02-08"],["MIA","WAS","2026-02-08"],["IND","TOR","2026-02-08"],["LAC","MIN","2026-02-08"],
@@ -1030,31 +1031,39 @@ function computeLotterySeeds(lotteryTeams) {
   const endLotteryRank = {};
   byEndSeason.forEach((t, i) => { endLotteryRank[t.abbrev] = i + 1; });
 
-  // Apply 2-back cap using within-group ranks
-  const withCap = byEndSeason.map(t => {
-    const endRank = endLotteryRank[t.abbrev];
-    const dRank = deadlineLotteryRank[t.abbrev];
-    // 2-back: pick can fall at most 2 positions within the lottery group
-    const cappedRank = Math.min(endRank, dRank + 2);
-    return {
-      abbrev: t.abbrev,
-      name: t.name,
-      w: t.w, l: t.l,
-      endRank,
-      deadlineRank: dRank,
-      cappedRank,
-      postDeadlineWins: simResults.postDeadlineWins[t.abbrev] || 0,
-    };
-  });
+  // Build team objects with caps
+  const teams = byEndSeason.map(t => ({
+    abbrev: t.abbrev,
+    name: t.name,
+    w: t.w, l: t.l,
+    endRank: endLotteryRank[t.abbrev],
+    deadlineRank: deadlineLotteryRank[t.abbrev],
+    cap: Math.min(deadlineLotteryRank[t.abbrev] + 2, 14),
+    postDeadlineWins: simResults.postDeadlineWins[t.abbrev] || 0,
+  }));
 
-  // Sort by capped rank, breaking ties with post-deadline wins (fewer wins = worse = better pick)
-  withCap.sort((a, b) => {
-    if (a.cappedRank !== b.cappedRank) return a.cappedRank - b.cappedRank;
-    // Tiebreaker: fewer post-deadline wins gets the better (lower) seed
-    return a.postDeadlineWins - b.postDeadlineWins;
-  });
+  // Greedy assignment enforcing 2-back caps as hard constraints.
+  // Fill slots from 14 (worst pick) down to 1 (best pick).
+  // For each slot, assign the team with the worst natural rank whose cap allows
+  // them at this slot. This preserves natural ordering while guaranteeing no team
+  // is placed at a slot worse than their cap.
+  const remaining = [...teams]; // sorted by endRank ascending (worst record first)
+  const assigned = new Array(14);
 
-  return withCap;
+  for (let slot = 14; slot >= 1; slot--) {
+    // Find the worst-ranked remaining team (highest endRank) whose cap >= slot
+    let bestIdx = -1;
+    for (let i = remaining.length - 1; i >= 0; i--) {
+      if (remaining[i].cap >= slot) {
+        bestIdx = i;
+        break;
+      }
+    }
+    assigned[slot - 1] = remaining.splice(bestIdx, 1)[0];
+    assigned[slot - 1].cappedRank = slot;
+  }
+
+  return assigned;
 }
 
 function runLottery() {
